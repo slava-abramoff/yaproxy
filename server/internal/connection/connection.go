@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"server/internal/entities"
+	"strconv"
 )
 
 type HubProvider interface {
@@ -24,21 +25,90 @@ type ConnectionHandler struct {
 	token          [4]byte
 }
 
+func NewTCPHandler() {}
+
+func (h *ConnectionHandler) newListener(port uint16) (net.Listener, error) {
+	addr := ":" + strconv.Itoa(int(port))
+	return net.Listen("tcp", addr)
+}
+
 // Начинаем подключать клиентов по публичному порту
-func StartPublicListener() {}
+func (h *ConnectionHandler) StartPublicListener(port uint16) {
+	listener, err := h.newListener(port)
+	if err != nil {
+		log.Printf("Error: %v", err)
+		return
+	}
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Printf("Error: %v", err)
+			conn.Close()
+			continue
+		}
+
+		go h.handlePublicConnection(conn)
+	}
+}
 
 // Ждем подключение туннелируемого хоста
-func StartTunnelListener() {}
+func (h *ConnectionHandler) StartTunnelListener(port uint16) {
+	listener, err := h.newListener(port)
+	if err != nil {
+		log.Printf("Error: %v", err)
+		return
+	}
 
-// Проверяем туннелируемого клиента на подлинность
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Printf("Error: %v", err)
+			conn.Close()
+			continue
+		}
+
+		err = h.tunnelHandshake(conn)
+		if err != nil {
+			log.Printf("Error: %v", err)
+			conn.Close()
+			continue
+		}
+
+		go h.handleTunnelConnection(conn)
+	}
+
+}
+
+// Рукопожатие туннеля
 func (h *ConnectionHandler) tunnelHandshake(conn net.Conn) error {
+	authBuf := make([]byte, 4)
+	_, err := io.ReadFull(conn, authBuf)
+	if err != nil {
+		return fmt.Errorf("Handshake token not recognized: %v\n", err)
+	}
+
+	var incomingToken [4]byte
+	copy(incomingToken[:], authBuf)
+
+	if incomingToken != h.token {
+		_, _ = conn.Write([]byte{0x00})
+		return fmt.Errorf("Access denied for %s, invalid token\n", conn.RemoteAddr())
+	}
+
+	_, err = conn.Write([]byte{0x01})
+	if err != nil {
+		return fmt.Errorf("Failed to send handshake confirmation: %v\n", err)
+	}
+
+	log.Println("The handshake was successful; the tunnel is authorized!")
+
 	return nil
 }
 
 // Обработка сообщений от туннелируемого ресурса
 func (h *ConnectionHandler) handleTunnelConnection(conn net.Conn) {
 	defer conn.Close()
-
 	log.Println("Tunnel is alive.")
 
 	h.hub.SetTunnel(conn)
@@ -112,6 +182,7 @@ func (h *ConnectionHandler) handlePublicConnection(conn net.Conn) {
 
 }
 
+// Отправка сообщений туннелю
 func (h *ConnectionHandler) sendTunnelServer(clientID [4]byte, payload []byte) error {
 	header := make([]byte, 8)
 
@@ -129,6 +200,8 @@ func (h *ConnectionHandler) sendTunnelServer(clientID [4]byte, payload []byte) e
 
 		return fmt.Errorf("Tunnelled resource is not connected. Dropping client %s.\n", client.Conn.RemoteAddr())
 	}
+
+	buffers := net.Buffers{header, payload}
 
 	// Отправляем 8 байт заголовка в сеть
 	_, err := tunnelServer.Write(header)
