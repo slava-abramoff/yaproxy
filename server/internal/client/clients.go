@@ -70,3 +70,14 @@ func (h *ClientHub) SetTunnel(conn net.Conn) {
 func (h *ClientHub) GetTunnel() net.Conn {
 	return h.tunnel
 }
+
+// RemoveTunnel безопасно убиваем убираем туннель
+func (h *ClientHub) RemoveTunnel(conn net.Conn) {
+	if h.tunnel != conn {
+		return
+	}
+
+	h.mu.Lock()
+	h.tunnel = nil
+	h.mu.Unlock()
+}
