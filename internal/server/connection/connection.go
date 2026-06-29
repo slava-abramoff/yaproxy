@@ -3,7 +3,7 @@ package connection
 import (
 	"fmt"
 	"net"
-	"server/internal/entities"
+	"yaproxy/internal/server/entities"
 )
 
 type HubProvider interface {

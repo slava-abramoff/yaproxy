@@ -1,6 +1,6 @@
 package connection
 
-import "server/utils/random"
+import "yaproxy/utils/random"
 
 // Генерируем новый токен
 func (h *ConnectionHandler) GenerateToken() ([4]byte, error) {

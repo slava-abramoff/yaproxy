@@ -1,10 +1,11 @@
-package client
+package hub
 
 import (
 	"crypto/rand"
 	"fmt"
 	"net"
-	"server/internal/entities"
+	"yaproxy/internal/server/entities"
+
 	"sync"
 )
 
